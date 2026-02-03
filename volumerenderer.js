@@ -59,6 +59,7 @@ class VolumeRenderer {
         
         // Fragment shader for ray marching volume rendering
         // Using 2D texture to simulate 3D volume rendering
+        // Fixed loop to use constant expression
         const fragmentShaderSource = `
             precision highp float;
             
@@ -125,10 +126,9 @@ class VolumeRenderer {
                 // Simple ray marching
                 vec4 colorAccum = vec4(0.0);
                 float stepSize = 0.01;
-                int maxSteps = 200;
                 
-                // March along the ray
-                for (int i = 0; i < maxSteps; i++) {
+                // Fixed loop to use constant expression
+                for (int i = 0; i < 200; i++) {
                     vec3 currentPos = rayStart + rayDir * float(i) * stepSize;
                     
                     // Check bounds
