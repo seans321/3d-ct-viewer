@@ -334,7 +334,12 @@ class VolumeRenderer {
             }
         }
         
-        // Upload volume data to 2D texture
+        // Ensure we have a valid texture
+        if (!this.volumeTexture) {
+            this.volumeTexture = this.gl.createTexture();
+        }
+        
+        // Upload volume data to 2D texture - bind texture before setting parameters
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.volumeTexture);
         
         // Set texture parameters
@@ -370,6 +375,9 @@ class VolumeRenderer {
             dataType,                   // type
             textureData                 // data
         );
+        
+        // Unbind texture after uploading
+        this.gl.bindTexture(this.gl.TEXTURE_2D, null);
         
         this.volumeDimensions = volumeData.dimensions;
         
