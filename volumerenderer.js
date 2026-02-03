@@ -315,7 +315,8 @@ class VolumeRenderer {
         const texHeight = rows * height;
         
         // Create a new array for the 2D texture
-        const textureData = new Float32Array(texWidth * texHeight);
+        // Use Uint8Array for UNSIGNED_BYTE format instead of Float32Array
+        const textureData = new Uint8Array(texWidth * texHeight);
         
         // Fill the texture data by arranging depth slices in a 2D grid
         for (let z = 0; z < depth; z++) {
@@ -329,7 +330,8 @@ class VolumeRenderer {
                     const texY = sliceRow * height + y;
                     const texIdx = texY * texWidth + texX;
                     
-                    textureData[texIdx] = volumeData.data[volumeIdx] / 255.0; // Normalize to [0,1]
+                    // Convert to 0-255 range for Uint8Array
+                    textureData[texIdx] = Math.max(0, Math.min(255, Math.round(volumeData.data[volumeIdx])));
                 }
             }
         }
@@ -357,24 +359,90 @@ class VolumeRenderer {
             internalFormat = this.gl.LUMINANCE;
             format = this.gl.LUMINANCE;
             dataType = this.gl.FLOAT;
+            // If we're using float extension, convert data to Float32Array
+            if(dataType === this.gl.FLOAT) {
+                // Create a Float32Array copy for floating point texture
+                const floatTextureData = new Float32Array(textureData.length);
+                for(let i = 0; i < textureData.length; i++) {
+                    floatTextureData[i] = textureData[i] / 255.0; // Normalize to [0,1]
+                }
+                // Upload texture data using float array
+                this.gl.texImage2D(
+                    this.gl.TEXTURE_2D,         // target
+                    0,                          // level
+                    internalFormat,             // internalformat
+                    texWidth,                   // width
+                    texHeight,                  // height
+                    0,                          // border
+                    format,                     // format
+                    dataType,                   // type
+                    floatTextureData            // data
+                );
+            } else {
+                // Upload texture data using byte array
+                this.gl.texImage2D(
+                    this.gl.TEXTURE_2D,         // target
+                    0,                          // level
+                    internalFormat,             // internalformat
+                    texWidth,                   // width
+                    texHeight,                  // height
+                    0,                          // border
+                    format,                     // format
+                    dataType,                   // type
+                    textureData                 // data
+                );
+            }
         } else if (this.gl.getExtension('OES_texture_half_float')) {
             internalFormat = this.gl.LUMINANCE;
             format = this.gl.LUMINANCE;
             dataType = this.gl.getExtension('OES_texture_half_float').HALF_FLOAT_OES;
+            // If we're using half float extension, convert data appropriately
+            if(dataType === this.gl.getExtension('OES_texture_half_float').HALF_FLOAT_OES) {
+                // Create a Float32Array for half-float texture
+                const floatTextureData = new Float32Array(textureData.length);
+                for(let i = 0; i < textureData.length; i++) {
+                    floatTextureData[i] = textureData[i] / 255.0; // Normalize to [0,1]
+                }
+                // Upload texture data using float array for half-float
+                this.gl.texImage2D(
+                    this.gl.TEXTURE_2D,         // target
+                    0,                          // level
+                    internalFormat,             // internalformat
+                    texWidth,                   // width
+                    texHeight,                  // height
+                    0,                          // border
+                    format,                     // format
+                    dataType,                   // type
+                    floatTextureData            // data
+                );
+            } else {
+                // Fallback to byte array
+                this.gl.texImage2D(
+                    this.gl.TEXTURE_2D,         // target
+                    0,                          // level
+                    internalFormat,             // internalformat
+                    texWidth,                   // width
+                    texHeight,                  // height
+                    0,                          // border
+                    format,                     // format
+                    dataType,                   // type
+                    textureData                 // data
+                );
+            }
+        } else {
+            // Default case: use UNSIGNED_BYTE with Uint8Array
+            this.gl.texImage2D(
+                this.gl.TEXTURE_2D,         // target
+                0,                          // level
+                internalFormat,             // internalformat
+                texWidth,                   // width
+                texHeight,                  // height
+                0,                          // border
+                format,                     // format
+                dataType,                   // type
+                textureData                 // data
+            );
         }
-        
-        // Upload texture data
-        this.gl.texImage2D(
-            this.gl.TEXTURE_2D,         // target
-            0,                          // level
-            internalFormat,             // internalformat
-            texWidth,                   // width
-            texHeight,                  // height
-            0,                          // border
-            format,                     // format
-            dataType,                   // type
-            textureData                 // data
-        );
         
         // Unbind texture after uploading
         this.gl.bindTexture(this.gl.TEXTURE_2D, null);
