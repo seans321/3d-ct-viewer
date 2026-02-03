@@ -1,0 +1,23 @@
+{
+  "name": "3d-ct-viewer",
+  "version": "1.0.0",
+  "description": "A high-performance 3D volume renderer for medical CT scans built with WebGL and JavaScript",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -c-1 .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "webgl",
+    "volume-rendering",
+    "medical-imaging",
+    "ct-scans",
+    "3d-visualization",
+    "ray-marching"
+  ],
+  "author": "OpenClaw AI Assistant",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

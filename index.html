@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D CT Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            z-index: 100;
+        }
+        
+        .slider-container {
+            margin: 5px 0;
+        }
+        
+        label {
+            display: inline-block;
+            width: 120px;
+        }
+        
+        input[type="range"] {
+            width: 200px;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin: 2px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="loading">Loading 3D CT Viewer...</div>
+        <canvas id="canvas"></canvas>
+        <div id="controls">
+            <div class="slider-container">
+                <label for="threshold">Threshold:</label>
+                <input type="range" id="threshold" min="0" max="255" value="100">
+                <span id="threshold-value">100</span>
+            </div>
+            <div class="slider-container">
+                <label for="opacity">Opacity:</label>
+                <input type="range" id="opacity" min="0" max="100" value="80">
+                <span id="opacity-value">80%</span>
+            </div>
+            <div>
+                <button id="load-sample">Load Sample</button>
+                <button id="reset-view">Reset View</button>
+            </div>
+            <div>
+                <input type="file" id="file-input" accept=".dcm,.nii,.nii.gz,.mhd,.raw" style="display: none;">
+                <button id="load-file">Load File</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.2.45/vue.global.prod.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+    <script src="volumerenderer.js"></script>
+    
+    <script>
+        // Main application
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadingDiv = document.getElementById('loading');
+            
+            // Initialize volume renderer
+            const canvas = document.getElementById('canvas');
+            const volumeRenderer = new VolumeRenderer(canvas);
+            
+            // Set up UI controls
+            const thresholdSlider = document.getElementById('threshold');
+            const thresholdValue = document.getElementById('threshold-value');
+            const opacitySlider = document.getElementById('opacity');
+            const opacityValue = document.getElementById('opacity-value');
+            const loadSampleBtn = document.getElementById('load-sample');
+            const resetViewBtn = document.getElementById('reset-view');
+            const loadFileBtn = document.getElementById('load-file');
+            const fileInput = document.getElementById('file-input');
+            
+            // Update values display
+            thresholdSlider.addEventListener('input', () => {
+                thresholdValue.textContent = thresholdSlider.value;
+                volumeRenderer.setThreshold(parseInt(thresholdSlider.value));
+            });
+            
+            opacitySlider.addEventListener('input', () => {
+                const value = parseInt(opacitySlider.value);
+                opacityValue.textContent = value + '%';
+                volumeRenderer.setOpacity(value / 100);
+            });
+            
+            // Load sample data
+            loadSampleBtn.addEventListener('click', async () => {
+                loadingDiv.style.display = 'block';
+                try {
+                    // Generate sample volume data (simulated CT scan)
+                    const size = 64;
+                    const volumeData = new Uint8Array(size * size * size);
+                    
+                    // Create a simple 3D shape (sphere) to simulate CT data
+                    for (let z = 0; z < size; z++) {
+                        for (let y = 0; y < size; y++) {
+                            for (let x = 0; x < size; x++) {
+                                const centerX = size / 2;
+                                const centerY = size / 2;
+                                const centerZ = size / 2;
+                                
+                                const dx = x - centerX;
+                                const dy = y - centerY;
+                                const dz = z - centerZ;
+                                
+                                const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                                
+                                // Create spherical structure with some noise
+                                let value = 0;
+                                if (distance < size/3) {
+                                    value = 180 + Math.sin(x*0.2) * 20;
+                                } else if (distance < size/2) {
+                                    value = 100 + Math.sin(y*0.3) * 15;
+                                }
+                                
+                                volumeData[z * size * size + y * size + x] = Math.max(0, Math.min(255, value));
+                            }
+                        }
+                    }
+                    
+                    volumeRenderer.loadVolume({
+                        data: volumeData,
+                        dimensions: [size, size, size],
+                        spacing: [1, 1, 1]
+                    });
+                    
+                    loadingDiv.style.display = 'none';
+                } catch (error) {
+                    console.error('Error loading sample:', error);
+                    loadingDiv.textContent = 'Error loading sample: ' + error.message;
+                }
+            });
+            
+            // Reset view
+            resetViewBtn.addEventListener('click', () => {
+                volumeRenderer.resetCamera();
+            });
+            
+            // File loading
+            loadFileBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', (event) => {
+                if (event.target.files.length > 0) {
+                    const file = event.target.files[0];
+                    loadingDiv.style.display = 'block';
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        // For demo purposes, we'll simulate processing
+                        // In a real implementation, you'd parse DICOM/NIfTI files
+                        setTimeout(() => {
+                            // Generate sample data since we can't actually parse medical formats in browser without proper libraries
+                            const size = 64;
+                            const volumeData = new Uint8Array(size * size * size);
+                            
+                            // Create more complex structures
+                            for (let z = 0; z < size; z++) {
+                                for (let y = 0; y < size; y++) {
+                                    for (let x = 0; x < size; x++) {
+                                        let value = 0;
+                                        
+                                        // Create multiple structures
+                                        const dx1 = Math.abs(x - size/3);
+                                        const dy1 = Math.abs(y - size/3);
+                                        const dz1 = Math.abs(z - size/3);
+                                        
+                                        const dist1 = Math.sqrt(dx1*dx1 + dy1*dy1 + dz1*dz1);
+                                        
+                                        const dx2 = Math.abs(x - 2*size/3);
+                                        const dy2 = Math.abs(y - 2*size/3);
+                                        const dz2 = Math.abs(z - 2*size/3);
+                                        
+                                        const dist2 = Math.sqrt(dx2*dx2 + dy2*dy2 + dz2*dz2);
+                                        
+                                        if (dist1 < size/5) {
+                                            value = 200;
+                                        } else if (dist2 < size/4) {
+                                            value = 150;
+                                        } else if ((x + y + z) % 5 === 0) {
+                                            value = 80;
+                                        }
+                                        
+                                        volumeData[z * size * size + y * size + x] = Math.max(0, Math.min(255, value));
+                                    }
+                                }
+                            }
+                            
+                            volumeRenderer.loadVolume({
+                                data: volumeData,
+                                dimensions: [size, size, size],
+                                spacing: [1, 1, 1]
+                            });
+                            
+                            loadingDiv.style.display = 'none';
+                        }, 1000); // Simulate loading time
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+            });
+            
+            // Hide loading after initialization
+            setTimeout(() => {
+                loadingDiv.style.display = 'none';
+            }, 1000);
+            
+            // Start rendering
+            function animate() {
+                volumeRenderer.render();
+                requestAnimationFrame(animate);
+            }
+            animate();
+        });
+    </script>
+</body>
+</html>
