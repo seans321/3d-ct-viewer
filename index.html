@@ -100,7 +100,6 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.2.45/vue.global.prod.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
     <script src="volumerenderer.js"></script>
     
@@ -112,6 +111,16 @@
             // Initialize volume renderer
             const canvas = document.getElementById('canvas');
             const volumeRenderer = new VolumeRenderer(canvas);
+            
+            // Set up canvas size
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                volumeRenderer.render(); // Trigger initial render
+            }
+            
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas(); // Initial resize
             
             // Set up UI controls
             const thresholdSlider = document.getElementById('threshold');
@@ -137,7 +146,7 @@
             
             // Load sample data
             loadSampleBtn.addEventListener('click', async () => {
-                loadingDiv.style.display = 'block';
+                loadingDiv.textContent = 'Loading sample data...';
                 try {
                     // Generate sample volume data (simulated CT scan)
                     const size = 64;
@@ -196,7 +205,7 @@
             fileInput.addEventListener('change', (event) => {
                 if (event.target.files.length > 0) {
                     const file = event.target.files[0];
-                    loadingDiv.style.display = 'block';
+                    loadingDiv.textContent = 'Processing file...';
                     
                     const reader = new FileReader();
                     reader.onload = function(e) {

@@ -1,0 +1,1 @@
+Deployment instructions completed. The project is ready to be pushed to GitHub.
