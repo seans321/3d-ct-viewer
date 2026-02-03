@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D CT Viewer Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        #container {
+            max-width: 1000px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+        }
+        
+        #canvas-container {
+            width: 800px;
+            height: 600px;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            position: relative;
+        }
+        
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        input[type="range"] {
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>3D CT Viewer Test Page</h1>
+        <p>This page tests the volume renderer functionality.</p>
+        
+        <div id="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div id="controls">
+            <div>
+                <label for="threshold">Threshold:</label>
+                <input type="range" id="threshold" min="0" max="255" value="100">
+                <span id="threshold-value">100</span>
+            </div>
+            <div>
+                <label for="opacity">Opacity:</label>
+                <input type="range" id="opacity" min="0" max="100" value="80">
+                <span id="opacity-value">80%</span>
+            </div>
+            <div>
+                <button id="load-sample">Load Sample Data</button>
+                <button id="reset-view">Reset View</button>
+            </div>
+        </div>
+        
+        <div id="status">Status: Ready</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+    <script src="volumerenderer.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const statusDiv = document.getElementById('status');
+            const canvas = document.getElementById('canvas');
+            const container = document.getElementById('canvas-container');
+            
+            // Set canvas size to match container
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            
+            statusDiv.textContent = 'Status: Initializing volume renderer...';
+            
+            try {
+                // Initialize volume renderer
+                const volumeRenderer = new VolumeRenderer(canvas);
+                statusDiv.textContent = 'Status: Volume renderer initialized successfully!';
+                
+                // Set up UI controls
+                const thresholdSlider = document.getElementById('threshold');
+                const thresholdValue = document.getElementById('threshold-value');
+                const opacitySlider = document.getElementById('opacity');
+                const opacityValue = document.getElementById('opacity-value');
+                const loadSampleBtn = document.getElementById('load-sample');
+                const resetViewBtn = document.getElementById('reset-view');
+                
+                // Update values display
+                thresholdSlider.addEventListener('input', () => {
+                    thresholdValue.textContent = thresholdSlider.value;
+                    volumeRenderer.setThreshold(parseInt(thresholdSlider.value));
+                    volumeRenderer.render(); // Re-render with new threshold
+                });
+                
+                opacitySlider.addEventListener('input', () => {
+                    const value = parseInt(opacitySlider.value);
+                    opacityValue.textContent = value + '%';
+                    volumeRenderer.setOpacity(value / 100);
+                    volumeRenderer.render(); // Re-render with new opacity
+                });
+                
+                // Load sample data
+                loadSampleBtn.addEventListener('click', async () => {
+                    statusDiv.textContent = 'Status: Loading sample data...';
+                    try {
+                        // Generate sample volume data (simulated CT scan)
+                        const size = 64;
+                        const volumeData = new Uint8Array(size * size * size);
+                        
+                        // Create a simple 3D shape (sphere) to simulate CT data
+                        for (let z = 0; z < size; z++) {
+                            for (let y = 0; y < size; y++) {
+                                for (let x = 0; x < size; x++) {
+                                    const centerX = size / 2;
+                                    const centerY = size / 2;
+                                    const centerZ = size / 2;
+                                    
+                                    const dx = x - centerX;
+                                    const dy = y - centerY;
+                                    const dz = z - centerZ;
+                                    
+                                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                                    
+                                    // Create spherical structure with some noise
+                                    let value = 0;
+                                    if (distance < size/3) {
+                                        value = 180 + Math.sin(x*0.2) * 20;
+                                    } else if (distance < size/2) {
+                                        value = 100 + Math.sin(y*0.3) * 15;
+                                    }
+                                    
+                                    volumeData[z * size * size + y * size + x] = Math.max(0, Math.min(255, value));
+                                }
+                            }
+                        }
+                        
+                        volumeRenderer.loadVolume({
+                            data: volumeData,
+                            dimensions: [size, size, size],
+                            spacing: [1, 1, 1]
+                        });
+                        
+                        statusDiv.textContent = 'Status: Sample data loaded successfully!';
+                    } catch (error) {
+                        console.error('Error loading sample:', error);
+                        statusDiv.textContent = 'Error loading sample: ' + error.message;
+                    }
+                });
+                
+                // Reset view
+                resetViewBtn.addEventListener('click', () => {
+                    volumeRenderer.resetCamera();
+                    volumeRenderer.render();
+                    statusDiv.textContent = 'Status: Camera reset';
+                });
+                
+                // Start rendering
+                function animate() {
+                    volumeRenderer.render();
+                    requestAnimationFrame(animate);
+                }
+                animate();
+                
+            } catch (error) {
+                console.error('Error initializing volume renderer:', error);
+                statusDiv.textContent = 'Error: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>
