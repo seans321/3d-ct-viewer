@@ -7,6 +7,15 @@ class VolumeRenderer {
             throw new Error('WebGL not supported');
         }
         
+        // Check for WebGL2 or OES_texture_float extension
+        if (!this.gl.getExtension('OES_texture_float') && !this.gl.getExtension('OES_texture_half_float')) {
+            console.warn('Floating point textures not supported, performance may be affected');
+        }
+        
+        // For WebGL1, we need additional extensions for 3D textures simulation
+        this.textureHalfFloat = this.gl.getExtension('OES_texture_half_float');
+        this.textureHalfFloatLinear = this.gl.getExtension('OES_texture_half_float_linear');
+        
         this.init();
     }
     
@@ -39,49 +48,104 @@ class VolumeRenderer {
         // Vertex shader for full-screen quad
         const vertexShaderSource = `
             attribute vec2 a_position;
-            varying vec3 v_texCoord;
+            varying vec2 v_texCoord;
             
             void main() {
                 gl_Position = vec4(a_position, 0.0, 1.0);
-                
-                // Map position to texture coordinates
-                v_texCoord = vec3((a_position.x + 1.0) / 2.0, 
-                                  (a_position.y + 1.0) / 2.0, 
-                                  0.5);
+                // Convert position to texture coordinates
+                v_texCoord = (a_position + 1.0) / 2.0;
             }
         `;
         
         // Fragment shader for ray marching volume rendering
+        // Since WebGL1 doesn't support 3D textures natively, we simulate it using multiple 2D textures
         const fragmentShaderSource = `
             precision highp float;
             
-            varying vec3 v_texCoord;
-            uniform sampler3D u_volumeTexture;
+            varying vec2 v_texCoord;
+            uniform sampler2D u_volumeTexture;
+            uniform float u_textureWidth;
+            uniform float u_textureHeight;
+            uniform float u_slices;
             uniform float u_threshold;
             uniform float u_opacity;
             uniform vec3 u_viewDir;
             uniform vec3 u_lightPos;
             uniform vec3 u_cameraPos;
+            uniform vec3 u_volumeSize;
+            
+            // Function to sample volume texture at 3D position
+            float sampleVolume(vec3 pos) {
+                // Normalize position to [0, 1] range
+                pos = clamp(pos, 0.001, 0.999);
+                
+                // Calculate slice index and interpolation factor
+                float sliceF = pos.z * u_slices;
+                float sliceIdx = floor(sliceF);
+                float sliceFrac = fract(sliceF);
+                
+                // Calculate UV coordinates for current slice
+                vec2 uv = pos.xy;
+                
+                // Calculate texture coordinates accounting for slice layout
+                float slicesPerRow = u_textureWidth / u_volumeSize.x;
+                float row = floor(sliceIdx / slicesPerRow);
+                float col = mod(sliceIdx, slicesPerRow);
+                
+                vec2 sliceSize = vec2(u_volumeSize.x / u_textureWidth, u_volumeSize.y / u_textureHeight);
+                vec2 sliceOffset = vec2(col * u_volumeSize.x / u_textureWidth, row * u_volumeSize.y / u_textureHeight);
+                
+                uv = uv * sliceSize + sliceOffset;
+                
+                float value1 = texture2D(u_volumeTexture, uv).r;
+                
+                // Linear interpolation between slices if needed
+                if (sliceFrac > 0.0 && sliceIdx < u_slices - 1.0) {
+                    // Calculate coordinates for next slice
+                    float nextSliceIdx = sliceIdx + 1.0;
+                    float nextRow = floor(nextSliceIdx / slicesPerRow);
+                    float nextCol = mod(nextSliceIdx, slicesPerRow);
+                    
+                    vec2 nextSliceOffset = vec2(nextCol * u_volumeSize.x / u_textureWidth, nextRow * u_volumeSize.y / u_textureHeight);
+                    vec2 nextUv = uv - sliceOffset + nextSliceOffset;
+                    
+                    float value2 = texture2D(u_volumeTexture, nextUv).r;
+                    return mix(value1, value2, sliceFrac);
+                }
+                
+                return value1;
+            }
             
             void main() {
-                vec3 rayDir = normalize(u_viewDir);
-                vec3 rayStart = v_texCoord;
+                // Ray marching parameters
+                vec3 rayStart = vec3(v_texCoord, 0.0);
+                vec3 rayEnd = vec3(v_texCoord, 1.0);
+                vec3 rayDir = normalize(rayEnd - rayStart);
                 
                 // Simple ray marching
                 vec4 colorAccum = vec4(0.0);
-                vec3 rayStep = rayDir * 0.01;
-                vec3 currentPos = rayStart;
+                float stepSize = 0.01;
+                int maxSteps = 200;
                 
                 // March along the ray
-                for (int i = 0; i < 200; i++) {
+                for (int i = 0; i < maxSteps; i++) {
+                    vec3 currentPos = rayStart + rayDir * float(i) * stepSize;
+                    
+                    // Check bounds
+                    if (currentPos.x < 0.0 || currentPos.x > 1.0 ||
+                        currentPos.y < 0.0 || currentPos.y > 1.0 ||
+                        currentPos.z < 0.0 || currentPos.z > 1.0) {
+                        break;
+                    }
+                    
                     // Sample the volume
-                    float density = texture3D(u_volumeTexture, currentPos).r;
+                    float density = sampleVolume(currentPos);
                     
                     if (density > u_threshold / 255.0) {
                         // Calculate basic lighting
                         float intensity = (density - u_threshold / 255.0) / (1.0 - u_threshold / 255.0);
                         
-                        // Simple Phong-like lighting
+                        // Simple lighting calculation
                         vec3 lightDir = normalize(u_lightPos - currentPos);
                         float diff = max(dot(normalize(rayDir), lightDir), 0.0);
                         float lighting = 0.2 + 0.8 * diff; // Ambient + Diffuse
@@ -94,15 +158,6 @@ class VolumeRenderer {
                         
                         // Early ray termination
                         if (colorAccum.a > 0.95) break;
-                    }
-                    
-                    currentPos += rayStep;
-                    
-                    // Check bounds
-                    if (currentPos.x < 0.0 || currentPos.x > 1.0 ||
-                        currentPos.y < 0.0 || currentPos.y > 1.0 ||
-                        currentPos.z < 0.0 || currentPos.z > 1.0) {
-                        break;
                     }
                 }
                 
@@ -160,7 +215,7 @@ class VolumeRenderer {
     }
     
     setupTextures() {
-        // Create 3D texture for volume data
+        // Create 2D texture to simulate 3D volume
         this.volumeTexture = this.gl.createTexture();
     }
     
@@ -169,11 +224,15 @@ class VolumeRenderer {
         this.gl.useProgram(this.program);
         this.uniformLocations = {
             volumeTexture: this.gl.getUniformLocation(this.program, 'u_volumeTexture'),
+            textureWidth: this.gl.getUniformLocation(this.program, 'u_textureWidth'),
+            textureHeight: this.gl.getUniformLocation(this.program, 'u_textureHeight'),
+            slices: this.gl.getUniformLocation(this.program, 'u_slices'),
             threshold: this.gl.getUniformLocation(this.program, 'u_threshold'),
             opacity: this.gl.getUniformLocation(this.program, 'u_opacity'),
             viewDir: this.gl.getUniformLocation(this.program, 'u_viewDir'),
             lightPos: this.gl.getUniformLocation(this.program, 'u_lightPos'),
-            cameraPos: this.gl.getUniformLocation(this.program, 'u_cameraPos')
+            cameraPos: this.gl.getUniformLocation(this.program, 'u_cameraPos'),
+            volumeSize: this.gl.getUniformLocation(this.program, 'u_volumeSize')
         };
     }
     
@@ -241,31 +300,68 @@ class VolumeRenderer {
     loadVolume(volumeData) {
         this.volumeData = volumeData;
         
-        // Upload volume data to 3D texture
-        this.gl.bindTexture(this.gl.TEXTURE_3D, this.volumeTexture);
+        // Convert 3D volume data to 2D texture format
+        const [width, height, depth] = volumeData.dimensions;
+        
+        // Calculate optimal 2D texture layout for the 3D volume
+        // We'll arrange the depth slices in a 2D grid
+        const slicesPerRow = Math.ceil(Math.sqrt(depth));
+        const rows = Math.ceil(depth / slicesPerRow);
+        
+        const texWidth = slicesPerRow * width;
+        const texHeight = rows * height;
+        
+        // Create a new array for the 2D texture
+        const textureData = new Float32Array(texWidth * texHeight);
+        
+        // Fill the texture data by arranging depth slices in a 2D grid
+        for (let z = 0; z < depth; z++) {
+            const sliceRow = Math.floor(z / slicesPerRow);
+            const sliceCol = z % slicesPerRow;
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const volumeIdx = z * width * height + y * width + x;
+                    const texX = sliceCol * width + x;
+                    const texY = sliceRow * height + y;
+                    const texIdx = texY * texWidth + texX;
+                    
+                    textureData[texIdx] = volumeData.data[volumeIdx] / 255.0; // Normalize to [0,1]
+                }
+            }
+        }
+        
+        // Upload volume data to 2D texture
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.volumeTexture);
         
         // Set texture parameters
-        this.gl.texParameteri(this.gl.TEXTURE_3D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
-        this.gl.texParameteri(this.gl.TEXTURE_3D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-        this.gl.texParameteri(this.gl.TEXTURE_3D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-        this.gl.texParameteri(this.gl.TEXTURE_3D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-        this.gl.texParameteri(this.gl.TEXTURE_3D, this.gl.TEXTURE_WRAP_R, this.gl.CLAMP_TO_EDGE);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
         
         // Upload texture data
-        this.gl.texImage3D(
-            this.gl.TEXTURE_3D,    // target
-            0,                     // level
-            this.gl.R8,            // internalformat
-            volumeData.dimensions[0], // width
-            volumeData.dimensions[1], // height
-            volumeData.dimensions[2], // depth
-            0,                     // border
-            this.gl.RED,           // format
-            this.gl.UNSIGNED_BYTE, // type
-            volumeData.data        // data
+        this.gl.texImage2D(
+            this.gl.TEXTURE_2D,         // target
+            0,                          // level
+            this.gl.R32F || this.gl.ALPHA, // internalformat (try float first, fallback to alpha)
+            texWidth,                   // width
+            texHeight,                  // height
+            0,                          // border
+            this.gl.RED || this.gl.ALPHA,  // format
+            this.gl.FLOAT || this.gl.UNSIGNED_BYTE, // type
+            textureData                 // data
         );
         
         this.volumeDimensions = volumeData.dimensions;
+        
+        // Store texture layout info
+        this.textureLayout = {
+            width: texWidth,
+            height: texHeight,
+            slices: depth,
+            volumeSize: [width, height, depth]
+        };
     }
     
     setThreshold(value) {
@@ -305,8 +401,19 @@ class VolumeRenderer {
         
         // Set uniforms
         this.gl.activeTexture(this.gl.TEXTURE0);
-        this.gl.bindTexture(this.gl.TEXTURE_3D, this.volumeTexture);
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.volumeTexture);
         this.gl.uniform1i(this.uniformLocations.volumeTexture, 0);
+        
+        // Set texture layout uniforms
+        if (this.textureLayout) {
+            this.gl.uniform1f(this.uniformLocations.textureWidth, this.textureLayout.width);
+            this.gl.uniform1f(this.uniformLocations.textureHeight, this.textureLayout.height);
+            this.gl.uniform1f(this.uniformLocations.slices, this.textureLayout.slices);
+            this.gl.uniform3f(this.uniformLocations.volumeSize, 
+                             this.textureLayout.volumeSize[0],
+                             this.textureLayout.volumeSize[1],
+                             this.textureLayout.volumeSize[2]);
+        }
         
         this.gl.uniform1f(this.uniformLocations.threshold, this.threshold);
         this.gl.uniform1f(this.uniformLocations.opacity, this.opacity);
@@ -331,13 +438,5 @@ class VolumeRenderer {
         
         // Draw the quad
         this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
-    }
-}
-
-// Helper function for 3D textures (WebGL1 doesn't support them natively)
-function texture3D(gl, texture, xoffset, yoffset, zoffset, width, height, depth, format, type, p) {
-    // For WebGL2, use texSubImage3D
-    if (gl.texSubImage3D) {
-        gl.texSubImage3D(gl.TEXTURE_3D, 0, xoffset, yoffset, zoffset, width, height, depth, format, type, p);
     }
 }
