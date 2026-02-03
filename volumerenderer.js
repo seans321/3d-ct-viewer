@@ -58,7 +58,8 @@ class VolumeRenderer {
         `;
         
         // Fragment shader for ray marching volume rendering
-        // Since WebGL1 doesn't support 3D textures natively, we simulate it using multiple 2D textures
+        // Using 2D texture to simulate 3D volume rendering
+        // Fixed loop to use constant expression
         const fragmentShaderSource = `
             precision highp float;
             
@@ -125,10 +126,9 @@ class VolumeRenderer {
                 // Simple ray marching
                 vec4 colorAccum = vec4(0.0);
                 float stepSize = 0.01;
-                int maxSteps = 200;
                 
-                // March along the ray
-                for (int i = 0; i < maxSteps; i++) {
+                // Fixed loop to use constant expression - WebGL requires constant in loops
+                for (int i = 0; i < 200; i++) {
                     vec3 currentPos = rayStart + rayDir * float(i) * stepSize;
                     
                     // Check bounds
@@ -168,7 +168,9 @@ class VolumeRenderer {
         this.vertexShader = this.createShader(this.gl.VERTEX_SHADER, vertexShaderSource);
         this.fragmentShader = this.createShader(this.gl.FRAGMENT_SHADER, fragmentShaderSource);
         
-        this.program = this.createProgram(this.vertexShader, this.fragmentShader);
+        if (this.vertexShader && this.fragmentShader) {
+            this.program = this.createProgram(this.vertexShader, this.fragmentShader);
+        }
     }
     
     createShader(type, source) {
@@ -178,6 +180,7 @@ class VolumeRenderer {
         
         if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
             console.error('Shader compilation error:', this.gl.getShaderInfoLog(shader));
+            console.log('Shader source:', source);
             this.gl.deleteShader(shader);
             return null;
         }
@@ -340,16 +343,31 @@ class VolumeRenderer {
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
         
+        // Determine the correct internal format and type based on WebGL capabilities
+        let internalFormat = this.gl.LUMINANCE;
+        let format = this.gl.LUMINANCE;
+        let dataType = this.gl.UNSIGNED_BYTE;
+        
+        if (this.gl.getExtension('OES_texture_float')) {
+            internalFormat = this.gl.LUMINANCE;
+            format = this.gl.LUMINANCE;
+            dataType = this.gl.FLOAT;
+        } else if (this.gl.getExtension('OES_texture_half_float')) {
+            internalFormat = this.gl.LUMINANCE;
+            format = this.gl.LUMINANCE;
+            dataType = this.gl.getExtension('OES_texture_half_float').HALF_FLOAT_OES;
+        }
+        
         // Upload texture data
         this.gl.texImage2D(
             this.gl.TEXTURE_2D,         // target
             0,                          // level
-            this.gl.R32F || this.gl.ALPHA, // internalformat (try float first, fallback to alpha)
+            internalFormat,             // internalformat
             texWidth,                   // width
             texHeight,                  // height
             0,                          // border
-            this.gl.RED || this.gl.ALPHA,  // format
-            this.gl.FLOAT || this.gl.UNSIGNED_BYTE, // type
+            format,                     // format
+            dataType,                   // type
             textureData                 // data
         );
         
@@ -379,7 +397,7 @@ class VolumeRenderer {
     }
     
     render() {
-        if (!this.volumeData) return;
+        if (!this.volumeData || !this.program) return;
         
         // Set viewport
         this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
