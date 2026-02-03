@@ -127,7 +127,7 @@ class VolumeRenderer {
                 vec4 colorAccum = vec4(0.0);
                 float stepSize = 0.01;
                 
-                // Fixed loop to use constant expression
+                // Fixed loop to use constant expression - WebGL requires constant in loops
                 for (int i = 0; i < 200; i++) {
                     vec3 currentPos = rayStart + rayDir * float(i) * stepSize;
                     
