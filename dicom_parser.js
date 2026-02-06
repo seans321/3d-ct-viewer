@@ -146,12 +146,16 @@ class DicomParser {
                 const arrayBuffer = await file.arrayBuffer();
                 const dicomData = await this.parseDicom(arrayBuffer);
                 
-                if (dicomData.pixelData && dicomData.rows && dicomData.columns) {
+                if (dicomData.pixelData) {
+                    // Use parsed dimensions or fallback to extracted values
+                    const sliceRows = dicomData.rows || dicomData.metadata['00280010'] || 512;
+                    const sliceCols = dicomData.columns || dicomData.metadata['00280011'] || 512;
+                    
                     slices.push({
                         data: dicomData.pixelData,
                         metadata: dicomData.metadata,
-                        rows: dicomData.rows,
-                        columns: dicomData.columns,
+                        rows: sliceRows,
+                        columns: sliceCols,
                         instanceNumber: dicomData.metadata['00200013'] || 0
                     });
                 }
