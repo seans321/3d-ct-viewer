@@ -359,36 +359,31 @@
                     const volumeData = new Uint8Array(sliceSize * sliceSize * numSlices);
                     
                     // Generate sample volume data representing the entire CT scan
+                    // Create a more visible structure for testing
                     for (let z = 0; z < numSlices; z++) {
                         for (let y = 0; y < sliceSize; y++) {
                             for (let x = 0; x < sliceSize; x++) {
                                 let value = 0;
                                 
-                                // Create a structure that varies through the Z-axis
-                                const normalizedZ = z / (numSlices - 1);
-                                
-                                // Create a torus-like structure that changes throughout the volume
+                                // Create a sphere that changes through the Z dimension
                                 const centerX = sliceSize / 2;
                                 const centerY = sliceSize / 2;
+                                const centerZ = numSlices / 2;
                                 
                                 const dx = x - centerX;
                                 const dy = y - centerY;
-                                const distance2D = Math.sqrt(dx*dx + dy*dy);
+                                const dz = z - centerZ;
                                 
-                                // Torus equation adapted for our use
-                                const torusRadius = sliceSize * 0.3;
-                                const tubeRadius = sliceSize * 0.15;
-                                const torusValue = Math.abs(distance2D - torusRadius) - tubeRadius;
+                                const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
                                 
-                                // Add some variation based on Z position
-                                const zVariation = Math.sin(normalizedZ * 8) * 10;
-                                
-                                if (torusValue < 0) {
-                                    value = 200 + zVariation;
-                                } else if (distance2D < sliceSize * 0.4) {
-                                    value = 100 + Math.random() * 30;
+                                // Create a structure that's easier to see in 3D
+                                if (distance < sliceSize * 0.4) {
+                                    // Add some internal structures
+                                    value = 180 + Math.sin(x * 0.3) * 20 + Math.sin(y * 0.4) * 15 + Math.sin(z * 0.2) * 10;
+                                } else if (distance < sliceSize * 0.6) {
+                                    value = 100 + Math.sin(z * 0.5) * 15;
                                 } else {
-                                    value = 20 + Math.random() * 10;
+                                    value = 20;
                                 }
                                 
                                 volumeData[z * sliceSize * sliceSize + y * sliceSize + x] = Math.max(0, Math.min(255, value));
