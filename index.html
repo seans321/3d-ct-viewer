@@ -139,7 +139,7 @@
         </div>
     </div>
 
-    <script src="basic_renderer.js"></script>
+    <script src="volume_raycaster.js"></script>
     
     <script>
         // Main application
@@ -148,7 +148,7 @@
             
             // Initialize volume renderer
             const canvas = document.getElementById('canvas');
-            const volumeRenderer = new BasicVolumeRenderer(canvas);
+            const volumeRenderer = new VolumeRaycaster(canvas);
             
             // Set up canvas size
             function resizeCanvas() {
