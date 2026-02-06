@@ -237,7 +237,12 @@ class SimpleVolumeRenderer {
             }
         }
         
-        // Upload texture
+        // Ensure we have a valid texture
+        if (!this.volumeTexture) {
+            this.volumeTexture = this.gl.createTexture();
+        }
+        
+        // Upload texture - bind texture before setting parameters
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.volumeTexture);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
@@ -255,6 +260,9 @@ class SimpleVolumeRenderer {
             this.gl.UNSIGNED_BYTE,
             textureData
         );
+        
+        // Unbind texture after uploading
+        this.gl.bindTexture(this.gl.TEXTURE_2D, null);
         
         this.textureLayout = {
             width: texWidth,
