@@ -136,10 +136,6 @@
                 <input type="file" id="file-input" accept=".dcm,.nii,.nii.gz,.mhd,.raw" style="display: none;">
                 <button id="load-file">Load File</button>
             </div>
-            <div id="file-list-container" style="display: none;">
-                <h4>Select CT Image:</h4>
-                <div id="file-list" class="file-list"></div>
-            </div>
         </div>
     </div>
 
@@ -323,96 +319,90 @@
                 }
             });
             
-            // Folder loading functionality
+            // Folder loading functionality - loads entire folder as single volume
             loadFolderBtn.addEventListener('click', () => {
                 folderInput.click();
             });
             
-            // Track selected files from the folder
-            let selectedFiles = [];
-            
             folderInput.addEventListener('change', (event) => {
                 if (event.target.files.length > 0) {
-                    selectedFiles = Array.from(event.target.files);
-                    showFileList(selectedFiles);
+                    const files = Array.from(event.target.files);
+                    loadingDiv.textContent = `Processing ${files.length} files as 3D volume...`;
+                    
+                    // Filter for DICOM files (common extensions)
+                    const dicomFiles = files.filter(file => 
+                        file.name.toLowerCase().endsWith('.dcm') || 
+                        file.name.toLowerCase().endsWith('.dicom') ||
+                        file.name.includes('.dcm') // Some DICOM files might not have extension
+                    ).sort(); // Sort to ensure proper order
+                    
+                    // If no files with DICOM extensions, use all files and sort by name
+                    if (dicomFiles.length === 0) {
+                        dicomFiles.push(...files.sort());
+                    }
+                    
+                    processDicomFolder(dicomFiles);
                 }
             });
             
-            function showFileList(files) {
-                fileList.innerHTML = '';
-                fileListContainer.style.display = 'block';
-                
-                files.forEach((file, index) => {
-                    const fileItem = document.createElement('div');
-                    fileItem.className = 'file-item';
-                    fileItem.textContent = file.name;
-                    fileItem.onclick = () => {
-                        // Remove selection from all items
-                        document.querySelectorAll('.file-item').forEach(item => {
-                            item.classList.remove('selected');
-                        });
-                        
-                        // Add selection to clicked item
-                        fileItem.classList.add('selected');
-                        
-                        // Process the selected file
-                        processSelectedFile(file);
-                    };
-                    
-                    fileList.appendChild(fileItem);
-                });
-            }
-            
-            function processSelectedFile(file) {
-                loadingDiv.textContent = `Processing ${file.name}...`;
-                
-                // For demo purposes, we'll simulate processing
-                // In a real implementation, you'd parse DICOM/NIfTI files
+            function processDicomFolder(files) {
+                // For demo purposes, we'll simulate processing the folder
+                // In a real implementation, you'd parse actual DICOM files
                 setTimeout(() => {
-                    // Generate sample data since we can't actually parse medical formats in browser without proper libraries
-                    const size = 64;
-                    const volumeData = new Uint8Array(size * size * size);
+                    // Determine volume dimensions based on the number of files
+                    // Assume square slices for simplicity
+                    const numSlices = files.length;
+                    const sliceSize = 64; // Could be determined from actual image dimensions
                     
-                    // Create more complex structures based on filename or random generation
-                    for (let z = 0; z < size; z++) {
-                        for (let y = 0; y < size; y++) {
-                            for (let x = 0; x < size; x++) {
+                    // Create a 3D volume from the slice data
+                    const volumeData = new Uint8Array(sliceSize * sliceSize * numSlices);
+                    
+                    // Generate sample volume data representing the entire CT scan
+                    for (let z = 0; z < numSlices; z++) {
+                        for (let y = 0; y < sliceSize; y++) {
+                            for (let x = 0; x < sliceSize; x++) {
                                 let value = 0;
                                 
-                                // Create multiple structures
-                                const dx1 = Math.abs(x - size/3);
-                                const dy1 = Math.abs(y - size/3);
-                                const dz1 = Math.abs(z - size/3);
+                                // Create a structure that varies through the Z-axis
+                                const normalizedZ = z / (numSlices - 1);
                                 
-                                const dist1 = Math.sqrt(dx1*dx1 + dy1*dy1 + dz1*dz1);
+                                // Create a torus-like structure that changes throughout the volume
+                                const centerX = sliceSize / 2;
+                                const centerY = sliceSize / 2;
                                 
-                                const dx2 = Math.abs(x - 2*size/3);
-                                const dy2 = Math.abs(y - 2*size/3);
-                                const dz2 = Math.abs(z - 2*size/3);
+                                const dx = x - centerX;
+                                const dy = y - centerY;
+                                const distance2D = Math.sqrt(dx*dx + dy*dy);
                                 
-                                const dist2 = Math.sqrt(dx2*dx2 + dy2*dy2 + dz2*dz2);
+                                // Torus equation adapted for our use
+                                const torusRadius = sliceSize * 0.3;
+                                const tubeRadius = sliceSize * 0.15;
+                                const torusValue = Math.abs(distance2D - torusRadius) - tubeRadius;
                                 
-                                if (dist1 < size/5) {
-                                    value = 200;
-                                } else if (dist2 < size/4) {
-                                    value = 150;
-                                } else if ((x + y + z) % 5 === 0) {
-                                    value = 80;
+                                // Add some variation based on Z position
+                                const zVariation = Math.sin(normalizedZ * 8) * 10;
+                                
+                                if (torusValue < 0) {
+                                    value = 200 + zVariation;
+                                } else if (distance2D < sliceSize * 0.4) {
+                                    value = 100 + Math.random() * 30;
+                                } else {
+                                    value = 20 + Math.random() * 10;
                                 }
                                 
-                                volumeData[z * size * size + y * size + x] = Math.max(0, Math.min(255, value));
+                                volumeData[z * sliceSize * sliceSize + y * sliceSize + x] = Math.max(0, Math.min(255, value));
                             }
                         }
                     }
                     
                     volumeRenderer.loadVolume({
                         data: volumeData,
-                        dimensions: [size, size, size],
-                        spacing: [1, 1, 1]
+                        dimensions: [sliceSize, sliceSize, numSlices],
+                        spacing: [1, 1, 1] // Could be determined from actual DICOM metadata
                     });
                     
                     loadingDiv.style.display = 'none';
-                }, 1000); // Simulate loading time
+                }, 1500); // Simulate loading time for folder processing
             }
             
             // Hide loading after initialization
