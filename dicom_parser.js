@@ -97,7 +97,6 @@ class DicomParser {
                 } else if (tag === '00280011') { // Columns
                     metadata[tag] = view.getUint16(valueOffset, true);
                     columns = metadata[tag];
-                }
                 } else if (tag === '00280100') { // BitsAllocated
                     metadata[tag] = view.getUint16(valueOffset, true);
                 } else if (tag === '00281050') { // WindowCenter
