@@ -8,13 +8,18 @@ class VolumeRenderer {
         }
         
         // Check for WebGL2 or OES_texture_float extension
-        if (!this.gl.getExtension('OES_texture_float') && !this.gl.getExtension('OES_texture_half_float')) {
+        this.floatTexturesSupported = !!(this.gl.getExtension('OES_texture_float') || this.gl.getExtension('OES_texture_half_float'));
+        if (!this.floatTexturesSupported) {
             console.warn('Floating point textures not supported, performance may be affected');
         }
         
         // For WebGL1, we need additional extensions for 3D textures simulation
         this.textureHalfFloat = this.gl.getExtension('OES_texture_half_float');
         this.textureHalfFloatLinear = this.gl.getExtension('OES_texture_half_float_linear');
+        
+        // Check if we have WEBGL_color_buffer_float extension for better rendering
+        this.colorBufferFloat = this.gl.getExtension('WEBGL_color_buffer_float') || 
+                               this.gl.getExtension('EXT_color_buffer_float');
         
         this.init();
     }
