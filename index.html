@@ -139,7 +139,7 @@
         </div>
     </div>
 
-    <script src="volumerenderer.js"></script>
+    <script src="simple_renderer.js"></script>
     
     <script>
         // Main application
@@ -148,7 +148,7 @@
             
             // Initialize volume renderer
             const canvas = document.getElementById('canvas');
-            const volumeRenderer = new VolumeRenderer(canvas);
+            const volumeRenderer = new SimpleVolumeRenderer(canvas);
             
             // Set up canvas size
             function resizeCanvas() {
@@ -175,8 +175,6 @@
             const loadFolderBtn = document.getElementById('load-folder');
             const fileInput = document.getElementById('file-input');
             const folderInput = document.getElementById('folder-input');
-            const fileListContainer = document.getElementById('file-list-container');
-            const fileList = document.getElementById('file-list');
             
             // Update values display
             thresholdSlider.addEventListener('input', () => {
@@ -251,7 +249,8 @@
             
             // Reset view
             resetViewBtn.addEventListener('click', () => {
-                volumeRenderer.resetCamera();
+                // Reset renderer state
+                volumeRenderer.cameraRotation = [0, 0];
             });
             
             // File loading
@@ -405,11 +404,7 @@
             }, 1000);
             
             // Start rendering
-            function animate() {
-                volumeRenderer.render();
-                requestAnimationFrame(animate);
-            }
-            animate();
+            startRendering(volumeRenderer);
         });
     </script>
 </body>
