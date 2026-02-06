@@ -316,7 +316,7 @@ class MinimalVolumeRenderer {
                 this.rotationX += deltaY * 0.01;
                 
                 // Clamp vertical rotation to avoid flipping
-                this.rotationX = max(-1.57, min(1.57, this.rotationX));
+                this.rotationX = Math.max(-1.57, Math.min(1.57, this.rotationX));
                 
                 this.lastMouseX = e.clientX;
                 this.lastMouseY = e.clientY;
