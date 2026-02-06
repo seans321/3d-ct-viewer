@@ -59,8 +59,8 @@ class VolumeRenderer {
             
             void main() {
                 gl_Position = vec4(a_position, 0.0, 1.0);
-                // Convert position to texture coordinates
-                v_texCoord = (a_position + 1.0) / 2.0;
+                // Convert position to texture coordinates (from [-1,1] to [0,1])
+                v_texCoord = (a_position + 1.0) * 0.5;
             }
         `;
         
@@ -127,23 +127,23 @@ class VolumeRenderer {
             }
             
             void main() {
-                // Ray marching parameters
+                // Ray marching parameters - start from front and go to back of volume
                 vec3 rayStart = vec3(v_texCoord, 0.0);
                 vec3 rayEnd = vec3(v_texCoord, 1.0);
-                vec3 rayDir = normalize(rayEnd - rayStart);
+                vec3 rayDir = rayEnd - rayStart; // Don't normalize to maintain actual distance
                 
                 // Simple ray marching
                 vec4 colorAccum = vec4(0.0);
-                float stepSize = 0.01;
+                float stepSize = 0.02; // Increased step size for better performance
                 
                 // Fixed loop to use constant expression - WebGL requires constant in loops
                 for (int i = 0; i < 200; i++) {
                     vec3 currentPos = rayStart + rayDir * float(i) * stepSize;
                     
                     // Check bounds
-                    if (currentPos.x < 0.0 || currentPos.x > 1.0 ||
-                        currentPos.y < 0.0 || currentPos.y > 1.0 ||
-                        currentPos.z < 0.0 || currentPos.z > 1.0) {
+                    if (currentPos.x < 0.001 || currentPos.x > 0.999 ||
+                        currentPos.y < 0.001 || currentPos.y > 0.999 ||
+                        currentPos.z < 0.001 || currentPos.z > 0.999) {
                         break;
                     }
                     
@@ -158,27 +158,39 @@ class VolumeRenderer {
                     float normalizedDensity = (density - windowMin) / (windowMax - windowMin);
                     normalizedDensity = clamp(normalizedDensity, 0.0, 1.0);
                     
+                    // Only consider voxels that are above threshold
                     if (normalizedDensity > u_threshold / 255.0) {
                         // Calculate basic lighting
-                        float intensity = (normalizedDensity - u_threshold / 255.0) / (1.0 - u_threshold / 255.0);
+                        float intensity = normalizedDensity;
                         
-                        // Simple lighting calculation
+                        // Simple lighting calculation - approximate gradient for normal
+                        vec3 grad = vec3(
+                            sampleVolume(currentPos + vec3(0.01, 0.0, 0.0)) - sampleVolume(currentPos - vec3(0.01, 0.0, 0.0)),
+                            sampleVolume(currentPos + vec3(0.0, 0.01, 0.0)) - sampleVolume(currentPos - vec3(0.0, 0.01, 0.0)),
+                            sampleVolume(currentPos + vec3(0.0, 0.0, 0.01)) - sampleVolume(currentPos - vec3(0.0, 0.0, 0.01))
+                        );
+                        vec3 normal = normalize(grad);
+                        
                         vec3 lightDir = normalize(u_lightPos - currentPos);
-                        float diff = max(dot(normalize(rayDir), lightDir), 0.0);
-                        float lighting = 0.2 + 0.8 * diff; // Ambient + Diffuse
+                        float diff = max(dot(normal, lightDir), 0.0);
+                        float lighting = 0.3 + 0.7 * diff; // Ambient + Diffuse
                         
                         vec4 voxelColor = vec4(vec3(intensity * lighting), intensity * u_opacity);
                         
+                        // Pre-multiply alpha for correct blending
+                        voxelColor.rgb *= voxelColor.a;
+                        
                         // Alpha compositing (front-to-back)
-                        voxelColor.a *= intensity;
-                        colorAccum = colorAccum + (1.0 - colorAccum.a) * voxelColor;
+                        colorAccum = colorAccum + voxelColor * (1.0 - colorAccum.a);
                         
                         // Early ray termination
-                        if (colorAccum.a > 0.95) break;
+                        if (colorAccum.a > 0.99) break;
                     }
                 }
                 
-                gl_FragColor = clamp(colorAccum, 0.0, 1.0);
+                // Final color with gamma correction
+                vec3 finalColor = pow(clamp(colorAccum.rgb, 0.0, 1.0), vec3(1.0/2.2));
+                gl_FragColor = vec4(finalColor, clamp(colorAccum.a, 0.0, 1.0));
             }
         `;
         
