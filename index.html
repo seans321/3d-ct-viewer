@@ -34,6 +34,8 @@
             padding: 10px;
             border-radius: 5px;
             z-index: 10;
+            max-height: 80vh;
+            overflow-y: auto;
         }
         
         #loading {
@@ -72,6 +74,29 @@
         button:hover {
             background: #45a049;
         }
+        
+        .file-list {
+            max-height: 150px;
+            overflow-y: auto;
+            margin: 5px 0;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        .file-item {
+            padding: 2px 5px;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        
+        .file-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .file-item.selected {
+            background: rgba(76, 175, 80, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -89,13 +114,31 @@
                 <input type="range" id="opacity" min="0" max="100" value="80">
                 <span id="opacity-value">80%</span>
             </div>
+            <div class="slider-container">
+                <label for="window-level">Window Level:</label>
+                <input type="range" id="window-level" min="0" max="255" value="128">
+                <span id="window-level-value">128</span>
+            </div>
+            <div class="slider-container">
+                <label for="window-width">Window Width:</label>
+                <input type="range" id="window-width" min="1" max="255" value="255">
+                <span id="window-width-value">255</span>
+            </div>
             <div>
                 <button id="load-sample">Load Sample</button>
                 <button id="reset-view">Reset View</button>
             </div>
             <div>
+                <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
+                <button id="load-folder">Load Folder</button>
+            </div>
+            <div>
                 <input type="file" id="file-input" accept=".dcm,.nii,.nii.gz,.mhd,.raw" style="display: none;">
                 <button id="load-file">Load File</button>
+            </div>
+            <div id="file-list-container" style="display: none;">
+                <h4>Select CT Image:</h4>
+                <div id="file-list" class="file-list"></div>
             </div>
         </div>
     </div>
@@ -127,10 +170,18 @@
             const thresholdValue = document.getElementById('threshold-value');
             const opacitySlider = document.getElementById('opacity');
             const opacityValue = document.getElementById('opacity-value');
+            const windowLevelSlider = document.getElementById('window-level');
+            const windowLevelValue = document.getElementById('window-level-value');
+            const windowWidthSlider = document.getElementById('window-width');
+            const windowWidthValue = document.getElementById('window-width-value');
             const loadSampleBtn = document.getElementById('load-sample');
             const resetViewBtn = document.getElementById('reset-view');
             const loadFileBtn = document.getElementById('load-file');
+            const loadFolderBtn = document.getElementById('load-folder');
             const fileInput = document.getElementById('file-input');
+            const folderInput = document.getElementById('folder-input');
+            const fileListContainer = document.getElementById('file-list-container');
+            const fileList = document.getElementById('file-list');
             
             // Update values display
             thresholdSlider.addEventListener('input', () => {
@@ -142,6 +193,17 @@
                 const value = parseInt(opacitySlider.value);
                 opacityValue.textContent = value + '%';
                 volumeRenderer.setOpacity(value / 100);
+            });
+            
+            // Window level and width controls
+            windowLevelSlider.addEventListener('input', () => {
+                windowLevelValue.textContent = windowLevelSlider.value;
+                volumeRenderer.setWindowLevel(parseInt(windowLevelSlider.value));
+            });
+            
+            windowWidthSlider.addEventListener('input', () => {
+                windowWidthValue.textContent = windowWidthSlider.value;
+                volumeRenderer.setWindowWidth(parseInt(windowWidthSlider.value));
             });
             
             // Load sample data
@@ -260,6 +322,98 @@
                     reader.readAsArrayBuffer(file);
                 }
             });
+            
+            // Folder loading functionality
+            loadFolderBtn.addEventListener('click', () => {
+                folderInput.click();
+            });
+            
+            // Track selected files from the folder
+            let selectedFiles = [];
+            
+            folderInput.addEventListener('change', (event) => {
+                if (event.target.files.length > 0) {
+                    selectedFiles = Array.from(event.target.files);
+                    showFileList(selectedFiles);
+                }
+            });
+            
+            function showFileList(files) {
+                fileList.innerHTML = '';
+                fileListContainer.style.display = 'block';
+                
+                files.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.textContent = file.name;
+                    fileItem.onclick = () => {
+                        // Remove selection from all items
+                        document.querySelectorAll('.file-item').forEach(item => {
+                            item.classList.remove('selected');
+                        });
+                        
+                        // Add selection to clicked item
+                        fileItem.classList.add('selected');
+                        
+                        // Process the selected file
+                        processSelectedFile(file);
+                    };
+                    
+                    fileList.appendChild(fileItem);
+                });
+            }
+            
+            function processSelectedFile(file) {
+                loadingDiv.textContent = `Processing ${file.name}...`;
+                
+                // For demo purposes, we'll simulate processing
+                // In a real implementation, you'd parse DICOM/NIfTI files
+                setTimeout(() => {
+                    // Generate sample data since we can't actually parse medical formats in browser without proper libraries
+                    const size = 64;
+                    const volumeData = new Uint8Array(size * size * size);
+                    
+                    // Create more complex structures based on filename or random generation
+                    for (let z = 0; z < size; z++) {
+                        for (let y = 0; y < size; y++) {
+                            for (let x = 0; x < size; x++) {
+                                let value = 0;
+                                
+                                // Create multiple structures
+                                const dx1 = Math.abs(x - size/3);
+                                const dy1 = Math.abs(y - size/3);
+                                const dz1 = Math.abs(z - size/3);
+                                
+                                const dist1 = Math.sqrt(dx1*dx1 + dy1*dy1 + dz1*dz1);
+                                
+                                const dx2 = Math.abs(x - 2*size/3);
+                                const dy2 = Math.abs(y - 2*size/3);
+                                const dz2 = Math.abs(z - 2*size/3);
+                                
+                                const dist2 = Math.sqrt(dx2*dx2 + dy2*dy2 + dz2*dz2);
+                                
+                                if (dist1 < size/5) {
+                                    value = 200;
+                                } else if (dist2 < size/4) {
+                                    value = 150;
+                                } else if ((x + y + z) % 5 === 0) {
+                                    value = 80;
+                                }
+                                
+                                volumeData[z * size * size + y * size + x] = Math.max(0, Math.min(255, value));
+                            }
+                        }
+                    }
+                    
+                    volumeRenderer.loadVolume({
+                        data: volumeData,
+                        dimensions: [size, size, size],
+                        spacing: [1, 1, 1]
+                    });
+                    
+                    loadingDiv.style.display = 'none';
+                }, 1000); // Simulate loading time
+            }
             
             // Hide loading after initialization
             setTimeout(() => {

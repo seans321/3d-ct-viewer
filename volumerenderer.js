@@ -33,6 +33,8 @@ class VolumeRenderer {
         // Initialize volume properties
         this.threshold = 100;
         this.opacity = 0.8;
+        this.windowLevel = 128; // Window level (center of window)
+        this.windowWidth = 256; // Window width (range of values to display)
         this.volumeData = null;
         this.volumeTexture = null;
         
@@ -70,6 +72,8 @@ class VolumeRenderer {
             uniform float u_slices;
             uniform float u_threshold;
             uniform float u_opacity;
+            uniform float u_windowLevel;
+            uniform float u_windowWidth;
             uniform vec3 u_viewDir;
             uniform vec3 u_lightPos;
             uniform vec3 u_cameraPos;
@@ -93,7 +97,7 @@ class VolumeRenderer {
                 float row = floor(sliceIdx / slicesPerRow);
                 float col = mod(sliceIdx, slicesPerRow);
                 
-                vec2 sliceSize = vec2(u_volumeSize.x / u_textureWidth, u_volumeSize.y / u_textureHeight);
+                vec2 sliceSize = vec2(u_volumeSize.x / u_volumeSize.x, u_volumeSize.y / u_volumeSize.y);
                 vec2 sliceOffset = vec2(col * u_volumeSize.x / u_textureWidth, row * u_volumeSize.y / u_textureHeight);
                 
                 uv = uv * sliceSize + sliceOffset;
@@ -141,9 +145,17 @@ class VolumeRenderer {
                     // Sample the volume
                     float density = sampleVolume(currentPos);
                     
-                    if (density > u_threshold / 255.0) {
+                    // Apply window level and window width transformation
+                    float windowMin = u_windowLevel - u_windowWidth * 0.5;
+                    float windowMax = u_windowLevel + u_windowWidth * 0.5;
+                    
+                    // Normalize the density value to [0, 1] based on window settings
+                    float normalizedDensity = (density - windowMin) / (windowMax - windowMin);
+                    normalizedDensity = clamp(normalizedDensity, 0.0, 1.0);
+                    
+                    if (normalizedDensity > u_threshold / 255.0) {
                         // Calculate basic lighting
-                        float intensity = (density - u_threshold / 255.0) / (1.0 - u_threshold / 255.0);
+                        float intensity = (normalizedDensity - u_threshold / 255.0) / (1.0 - u_threshold / 255.0);
                         
                         // Simple lighting calculation
                         vec3 lightDir = normalize(u_lightPos - currentPos);
@@ -232,6 +244,8 @@ class VolumeRenderer {
             slices: this.gl.getUniformLocation(this.program, 'u_slices'),
             threshold: this.gl.getUniformLocation(this.program, 'u_threshold'),
             opacity: this.gl.getUniformLocation(this.program, 'u_opacity'),
+            windowLevel: this.gl.getUniformLocation(this.program, 'u_windowLevel'),
+            windowWidth: this.gl.getUniformLocation(this.program, 'u_windowWidth'),
             viewDir: this.gl.getUniformLocation(this.program, 'u_viewDir'),
             lightPos: this.gl.getUniformLocation(this.program, 'u_lightPos'),
             cameraPos: this.gl.getUniformLocation(this.program, 'u_cameraPos'),
@@ -466,6 +480,14 @@ class VolumeRenderer {
         this.opacity = value;
     }
     
+    setWindowLevel(value) {
+        this.windowLevel = value;
+    }
+    
+    setWindowWidth(value) {
+        this.windowWidth = value;
+    }
+    
     resetCamera() {
         this.cameraPosition = [0, 0, 5];
         this.cameraRotation = [0, 0];
@@ -511,6 +533,8 @@ class VolumeRenderer {
         
         this.gl.uniform1f(this.uniformLocations.threshold, this.threshold);
         this.gl.uniform1f(this.uniformLocations.opacity, this.opacity);
+        this.gl.uniform1f(this.uniformLocations.windowLevel, this.windowLevel);
+        this.gl.uniform1f(this.uniformLocations.windowWidth, this.windowWidth);
         
         // Calculate view direction based on rotation
         const rotX = this.cameraRotation[0];
