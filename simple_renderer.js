@@ -97,9 +97,19 @@ class SimpleVolumeRenderer {
                 float normalizedDensity = (density - windowMin) / (windowMax - windowMin);
                 normalizedDensity = clamp(normalizedDensity, 0.0, 1.0);
                 
-                float intensity = step(u_threshold / 255.0, normalizedDensity) * normalizedDensity;
+                float intensity = normalizedDensity;
+                if (normalizedDensity < u_threshold / 255.0) {
+                    intensity = 0.0;
+                }
                 
-                gl_FragColor = vec4(vec3(intensity), intensity * u_opacity);
+                // Make sure we show something
+                if (intensity > 0.0) {
+                    gl_FragColor = vec4(vec3(intensity), intensity * u_opacity);
+                } else {
+                    // Show a subtle pattern to indicate the volume data exists but is below threshold
+                    float pattern = sin(v_texCoord.x * 20.0) * sin(v_texCoord.y * 20.0) * 0.05 + 0.05;
+                    gl_FragColor = vec4(vec3(pattern), 1.0);
+                }
             }
         `;
         
